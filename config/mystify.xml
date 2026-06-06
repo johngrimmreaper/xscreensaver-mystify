@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<screensaver name="mystify" _label="Mystify">
+  <command arg="-root"/>
+  <number id="delay" type="slider" arg="-delay %"
+          _label="Frame delay" _low-label="Fast" _high-label="Slow"
+          low="10000" high="120000" default="30000"/>
+  <number id="polys" type="spinbutton" arg="-polys %"
+          _label="Moving polygons" low="1" high="8" default="2"/>
+  <number id="points" type="spinbutton" arg="-points %"
+          _label="Corners per polygon" low="3" high="15" default="4"/>
+  <number id="trails" type="slider" arg="-trails %"
+          _label="Trailing wires" _low-label="Short" _high-label="Long"
+          low="0" high="24" default="5"/>
+  <number id="speed" type="slider" arg="-speed %"
+          _label="Corner speed" _low-label="Slow" _high-label="Fast"
+          low="2" high="40" default="17"/>
+  <number id="thickness" type="spinbutton" arg="-thickness %"
+          _label="Line thickness" low="1" high="8" default="1"/>
+  <number id="colors" type="spinbutton" arg="-colors %"
+          _label="Color steps" low="8" high="128" default="64"/>
+  <xscreensaver-text/>
+  <_description>
+Two colorful wire polygons deform as their corners bounce independently around
+the screen. Old wires are erased with black lines instead of clearing the
+whole frame, recreating the economical rendering and characteristic tiny gaps
+of the classic Windows 95/98 Mystify Your Mind screensaver.
+  </_description>
+</screensaver>

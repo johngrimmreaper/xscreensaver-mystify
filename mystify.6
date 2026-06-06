@@ -1,0 +1,96 @@
+.TH MYSTIFY 6 "June 2026" "mystify 0.1.0" "XScreenSaver display hacks"
+.SH NAME
+mystify \- nostalgic bouncing wire polygons for XScreenSaver
+.SH SYNOPSIS
+.B mystify
+.RB [ \-display
+display]
+.RB [ \-root ]
+.RB [ \-window ]
+.RB [ \-window-id
+id]
+.RB [ \-delay
+microseconds]
+.RB [ \-polys
+number]
+.RB [ \-points
+number]
+.RB [ \-trails
+number]
+.RB [ \-speed
+number]
+.RB [ \-thickness
+pixels]
+.RB [ \-colors
+number]
+.SH DESCRIPTION
+.B mystify
+animates deforming wire polygons whose corners move independently and change
+speed when they bounce from the edges of the window.
+.PP
+It is inspired by the Windows 95/98 "Mystify Your Mind" screensaver. Instead
+of clearing or redrawing the whole frame, it draws one new wire and erases
+only the oldest retained wire with black. This is both lightweight and
+responsible for the characteristic tiny black gaps where old and new wires
+cross.
+.SH OPTIONS
+.TP
+.B \-root
+Draw on the root window.
+.TP
+.B \-window
+Create a normal 800 by 600 test window. This is the default when no root or
+external window is supplied.
+.TP
+.BI \-window-id " id"
+Draw into an existing X window. The environment variable
+.B XSCREENSAVER_WINDOW
+is also recognized.
+.TP
+.BI \-delay " microseconds"
+Delay between frames. Default: 30000.
+.TP
+.BI \-polys " number"
+Number of independently moving polygons. Default: 2.
+.TP
+.BI \-points " number"
+Corners per polygon. Default: 4.
+.TP
+.BI \-trails " number"
+Number of old wires retained behind each leading wire. Default: 5.
+.TP
+.BI \-speed " number"
+Maximum corner velocity. Default: 17 pixels per frame.
+.TP
+.BI \-thickness " pixels"
+Line thickness. Default: 1.
+.TP
+.BI \-colors " number"
+Number of hue steps in the allocated palette. Default: 64.
+.TP
+.BI \-seed " number"
+Use a deterministic random seed.
+.TP
+.BI \-frames " number"
+Exit after a number of frames. Intended for testing.
+.TP
+.B \-self-test
+Run non-graphical internal tests and exit.
+.SH ENVIRONMENT
+.TP
+.B DISPLAY
+Default X display.
+.TP
+.B XSCREENSAVER_WINDOW
+Existing target window supplied by XScreenSaver.
+.SH SEE ALSO
+.BR xscreensaver (1),
+.BR xscreensaver-settings (1),
+.BR X (7)
+.SH AUTHORS
+Reaper <JohnGrimmReaper@disroot.org>.
+.SH LICENSE
+This software is distributed under the X11 License.
+See the
+.B LICENSE
+file included with the source code.
