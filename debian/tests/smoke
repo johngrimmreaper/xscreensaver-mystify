@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+/usr/libexec/xscreensaver/mystify --self-test
+xvfb-run -a -s '-screen 0 640x480x24 -nolisten tcp' \
+  /usr/libexec/xscreensaver/mystify -window -frames 20 -delay 1000 -seed 12345
+xvfb-run -a -s '-screen 0 640x480x24 -nolisten tcp' \
+  /usr/libexec/xscreensaver/mystify -root -frames 20 -delay 1000 -seed 12345

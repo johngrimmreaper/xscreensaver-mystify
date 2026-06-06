@@ -1,0 +1,7 @@
+xscreensaver-mystify (0.1.0-1~noble1) noble; urgency=medium
+
+  * Initial Ubuntu Noble package.
+  * Add a lightweight Xlib implementation of the legacy Mystify effect.
+  * Integrate with XScreenSaver through its hack and XML configuration paths.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sat, 06 Jun 2026 22:14:00 +0000

@@ -1,0 +1,25 @@
+Source: xscreensaver-mystify
+Section: x11
+Priority: optional
+Maintainer: Reaper <JohnGrimmReaper@disroot.org>
+Build-Depends:
+ debhelper-compat (= 13),
+ libx11-dev,
+ pkgconf,
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: xscreensaver-mystify
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ xscreensaver,
+Description: nostalgic Mystify display hack for XScreenSaver
+ A lightweight Xlib recreation of the Windows 95/98 Mystify Your Mind
+ screensaver. Two colorful deforming wire polygons bounce around the screen,
+ retaining and incrementally erasing old outlines.
+ .
+ It uses integer motion and plain X11 drawing without OpenGL, XRender, GTK,
+ alpha blending, or full-frame animation copies, making it suitable for older
+ Unix workstations and low-end computers.
