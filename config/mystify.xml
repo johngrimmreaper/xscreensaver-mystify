@@ -13,7 +13,7 @@
           low="0" high="24" default="5"/>
   <number id="speed" type="slider" arg="-speed %"
           _label="Corner speed" _low-label="Slow" _high-label="Fast"
-          low="2" high="40" default="17"/>
+          low="2" high="40" default="14"/>
   <number id="thickness" type="spinbutton" arg="-thickness %"
           _label="Line thickness" low="1" high="8" default="1"/>
   <number id="colors" type="spinbutton" arg="-colors %"

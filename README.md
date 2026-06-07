@@ -45,7 +45,7 @@ Install through the Debian package for XScreenSaver integration.
 -polys N              moving polygons (default 2)
 -points N             corners per polygon (default 4)
 -trails N             retained older wires (default 5)
--speed N              maximum corner speed (default 17)
+-speed N              maximum corner speed (default 14)
 -thickness N          line width (default 1)
 -colors N             allocated hue steps (default 64)
 -seed N               reproducible random seed
