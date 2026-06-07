@@ -18,7 +18,6 @@
           _label="Line thickness" low="1" high="8" default="1"/>
   <number id="colors" type="spinbutton" arg="-colors %"
           _label="Color steps" low="8" high="128" default="64"/>
-  <xscreensaver-text/>
   <_description>
 Two colorful wire polygons deform as their corners bounce independently around
 the screen. Old wires are erased with black lines instead of clearing the
