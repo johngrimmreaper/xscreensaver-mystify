@@ -7,4 +7,6 @@ export DEB_CFLAGS_MAINT_APPEND = -Wall -Wextra -Wpedantic
 	dh $@
 
 override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 	$(MAKE) check
+endif

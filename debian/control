@@ -7,6 +7,9 @@ Build-Depends:
  libx11-dev,
  pkgconf,
 Standards-Version: 4.6.2
+Homepage: https://github.com/johngrimmreaper/xscreensaver-mystify
+Vcs-Git: https://github.com/johngrimmreaper/xscreensaver-mystify.git
+Vcs-Browser: https://github.com/johngrimmreaper/xscreensaver-mystify
 Rules-Requires-Root: no
 
 Package: xscreensaver-mystify
@@ -15,6 +18,7 @@ Depends:
  ${misc:Depends},
  ${shlibs:Depends},
  xscreensaver,
+Enhances: xscreensaver
 Description: nostalgic Mystify display hack for XScreenSaver
  A lightweight Xlib recreation of the Windows 95/98 Mystify Your Mind
  screensaver. Two colorful deforming wire polygons bounce around the screen,
