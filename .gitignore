@@ -1,24 +1,33 @@
-# Compiled program and objects
-mystify
-*.o
+# Build output
+/mystify
 
 # Debian package build artifacts
-debian/files
-debian/*.debhelper.log
-debian/*.substvars
-debian/.debhelper/
-debian/xscreensaver-mystify/
+/debian/tmp/
+/debian/.debhelper/
+/debian/xscreensaver-mystify/
+/debian/xscreensaver-screensaver-mystify/
+/debian/files
+/debian/debhelper-build-stamp
+/debian/*.substvars
+/debian/*.debhelper.log
+/*.debhelper.log
 
-# Debhelper-generated files
-.debhelper/
-debhelper-build-stamp
+# Generated package artifacts
+/*.deb
+/*.ddeb
+/*.build
+/*.buildinfo
+/*.changes
+/*.dsc
+/*.tar.*
 
-# Patch/build residue
-.pc/
-_build/
-build/
+# Quilt/source package state
+/.pc/
 
-# Editor and temporary files
+# Compiler/editor residue
+*.o
 *~
 *.swp
 *.tmp
+_build/
+build/

@@ -1,3 +1,17 @@
+xscreensaver-mystify (0.1.1-1~noble1) noble; urgency=medium
+
+  * Release Mystify 0.1.1 with Ubuntu style XScreenSaver layout and split
+    binary package.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 08 Jun 2026 04:05:38 +0000
+
+xscreensaver-mystify (0.1.0-2~noble1) noble; urgency=medium
+
+  * Rename binary package to xscreensaver-screensaver-mystify and keep
+    xscreensaver-mystify as a transitional package.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 08 Jun 2026 03:19:26 +0000
+
 xscreensaver-mystify (0.1.0-1~noble1) noble; urgency=medium
 
   * Initial Ubuntu Noble package.

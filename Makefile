@@ -25,9 +25,6 @@ check: mystify
 install: mystify
 	install -D -m 0755 mystify $(DESTDIR)$(LIBEXECDIR)/mystify
 	install -D -m 0644 config/mystify.xml $(DESTDIR)$(SYSCONFDIR)/mystify.xml
-	install -D -m 0644 mystify.6 $(DESTDIR)$(MANDIR)/man6/mystify.6
-	mkdir -p $(DESTDIR)$(PREFIX)/lib/xscreensaver
-	ln -sfn ../../libexec/xscreensaver/mystify $(DESTDIR)$(PREFIX)/lib/xscreensaver/mystify
 
 clean:
 	rm -f mystify
