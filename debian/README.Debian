@@ -1,0 +1,21 @@
+xscreensaver-screensaver-mystify for Ubuntu
+==========================================
+
+This package installs the Mystify screen saver hack for XScreenSaver.
+
+Installed files:
+
+  /usr/libexec/xscreensaver/mystify
+  /usr/share/xscreensaver/config/mystify.xml
+  /usr/share/applications/screensavers/mystify.desktop
+
+On systems where Mystify does not appear automatically in the
+XScreenSaver list, add it manually to the "programs" resource in
+~/.xscreensaver.
+
+For example, add a line like this inside the programs list:
+
+              mystify -root                                 \n\
+
+Do not edit ~/.xscreensaver while xscreensaver-settings is running,
+because the settings program may rewrite the file.

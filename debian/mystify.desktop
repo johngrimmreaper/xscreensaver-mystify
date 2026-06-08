@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Mystify
+Comment=Draw colorful deforming wire polygons
+Exec=/usr/libexec/xscreensaver/mystify -root
+TryExec=/usr/libexec/xscreensaver/mystify
+StartupNotify=false
+Terminal=false
+Type=Application
+Categories=Screensaver;

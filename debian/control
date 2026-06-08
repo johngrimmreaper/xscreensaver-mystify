@@ -5,20 +5,25 @@ Maintainer: Reaper <JohnGrimmReaper@disroot.org>
 Build-Depends:
  debhelper-compat (= 13),
  libx11-dev,
- pkgconf,
+ pkgconf
 Standards-Version: 4.6.2
 Homepage: https://github.com/johngrimmreaper/xscreensaver-mystify
 Vcs-Git: https://github.com/johngrimmreaper/xscreensaver-mystify.git
 Vcs-Browser: https://github.com/johngrimmreaper/xscreensaver-mystify
 Rules-Requires-Root: no
 
-Package: xscreensaver-mystify
+Package: xscreensaver-screensaver-mystify
 Architecture: any
 Depends:
  ${misc:Depends},
  ${shlibs:Depends},
- xscreensaver,
-Enhances: xscreensaver
+ xscreensaver
+Breaks:
+ xscreensaver-mystify (<< 0.1.0-2~noble1)
+Replaces:
+ xscreensaver-mystify (<< 0.1.0-2~noble1)
+Enhances:
+ xscreensaver
 Description: nostalgic Mystify display hack for XScreenSaver
  A lightweight Xlib recreation of the Windows 95/98 Mystify Your Mind
  screensaver. Two colorful deforming wire polygons bounce around the screen,
@@ -27,3 +32,12 @@ Description: nostalgic Mystify display hack for XScreenSaver
  It uses integer motion and plain X11 drawing without OpenGL, XRender, GTK,
  alpha blending, or full-frame animation copies, making it suitable for older
  Unix workstations and low-end computers.
+
+Package: xscreensaver-mystify
+Architecture: all
+Depends:
+ ${misc:Depends},
+ xscreensaver-screensaver-mystify (= ${source:Version})
+Description: transitional package for xscreensaver-screensaver-mystify
+ This package depends on xscreensaver-screensaver-mystify and can be safely
+ removed after the upgrade.

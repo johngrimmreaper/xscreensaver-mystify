@@ -1,0 +1,4 @@
+debian/tmp/usr/libexec/xscreensaver/mystify usr/libexec/xscreensaver/
+debian/tmp/usr/share/xscreensaver/config/mystify.xml usr/share/xscreensaver/config/
+debian/mystify.desktop usr/share/applications/screensavers/
+mystify.6x usr/share/man/man6/
