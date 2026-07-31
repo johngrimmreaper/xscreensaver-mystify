@@ -49,6 +49,21 @@ On Debian or Ubuntu:
 sudo apt install build-essential pkgconf libx11-dev
 ```
 
+On Fedora, RHEL, Rocky Linux, or AlmaLinux with EPEL enabled:
+
+```sh
+sudo dnf install gcc make pkgconf-pkg-config libX11-devel   desktop-file-utils rpm-build rpmdevtools xscreensaver-base
+rpmdev-setuptree
+spectool -g -R xscreensaver-mystify.spec
+rpmbuild -ba xscreensaver-mystify.spec
+```
+
+The RPM spec follows Fedora and EPEL's non-OpenGL XScreenSaver hack layout.
+It installs a modular `hacks.conf.d` fragment and refreshes XScreenSaver's
+generated hack list when the package is installed or removed. The additional
+`xscreensaver-mystify.desktop` entry follows Fedora's GNOME screensaver
+compatibility convention and is restricted with `OnlyShowIn=GNOME;`.
+
 ## Installation
 
 ```sh
