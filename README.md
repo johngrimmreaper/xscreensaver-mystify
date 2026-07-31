@@ -143,14 +143,14 @@ generated hack list when the package is installed or removed. The additional
 `xscreensaver-mystify.desktop` entry follows Fedora's GNOME screensaver
 compatibility convention and is restricted with `OnlyShowIn=GNOME;`.
 
-## Installation
+## Package contents
 
-```sh
-sudo make install
-```
+Both the Debian and RPM packages install the Mystify executable, XML
+configuration, manual page, and screensaver desktop entry.
 
-The Debian package additionally installs the manual page and screensaver
-desktop entry.
+The RPM package additionally installs Fedora and EPEL's modular
+`hacks.conf.d` registration fragment and refreshes XScreenSaver's generated
+hack list when the package is installed or removed.
 
 ## License
 
