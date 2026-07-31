@@ -5,7 +5,6 @@
 /debian/tmp/
 /debian/.debhelper/
 /debian/xscreensaver-mystify/
-/debian/xscreensaver-screensaver-mystify/
 /debian/files
 /debian/debhelper-build-stamp
 /debian/*.substvars
