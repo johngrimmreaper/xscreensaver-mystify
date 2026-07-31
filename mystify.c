@@ -1,870 +1,1017 @@
-/*
- * SPDX-License-Identifier: X11
- * Copyright (C) 2026 Reaper <JohnGrimmReaper@disroot.org>
+/* xscreensaver, Copyright (c) 2026 Reaper <JohnGrimmReaper@disroot.org>
+ *
+ * Permission to use, copy, modify, distribute, and sell this software and its
+ * documentation for any purpose is hereby granted without fee, provided that
+ * the above copyright notice appear in all copies and that both that
+ * copyright notice and this permission notice appear in supporting
+ * documentation.  No representations are made about the suitability of this
+ * software for any purpose.  It is provided "as is" without express or
+ * implied warranty.
  */
 
-/*
- * Mystify for XScreenSaver
- *
- * Copyright (c) 2026 Reaper <JohnGrimmReaper@disroot.org>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- */
+#include "screenhack.h"
 
-#define _POSIX_C_SOURCE 200809L
-
-#include <X11/Xatom.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-
-#include <errno.h>
 #include <limits.h>
-#include <signal.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <unistd.h>
 
-#define PROGRAM_NAME "mystify"
-#define PROGRAM_VERSION "0.1.0"
-
-#define DEFAULT_DELAY_US 30000U
-#define DEFAULT_POLYS 2
-#define DEFAULT_POINTS 4
-#define DEFAULT_TRAILS 5
-#define DEFAULT_SPEED 14
-#define DEFAULT_THICKNESS 1
-#define DEFAULT_COLORS 64
-
-#define MIN_POLYS 1
-#define MAX_POLYS 16
-#define MIN_POINTS 3
-#define MAX_POINTS 32
-#define MIN_TRAILS 0
-#define MAX_TRAILS 64
-#define MIN_SPEED 1
-#define MAX_SPEED 128
+#define MIN_POLYGONS  1
+#define MAX_POLYGONS 16
+#define MIN_POINTS    3
+#define MAX_POINTS   32
+#define MIN_TRAILS    0
+#define MAX_TRAILS   64
+#define MIN_SPEED     1
+#define MAX_SPEED   128
 #define MIN_THICKNESS 1
 #define MAX_THICKNESS 16
-#define MIN_COLORS 8
-#define MAX_COLORS 256
+#define MIN_COLORS    8
+#define MAX_COLORS  256
 
-struct options {
-    const char *display_name;
-    Window requested_window;
-    bool have_requested_window;
-    bool root;
-    bool create_window;
-    bool self_test;
-    unsigned int delay_us;
-    int polygons;
-    int points;
-    int trails;
-    int speed;
-    int thickness;
-    int colors;
-    unsigned int seed;
-    bool seed_set;
-    unsigned long frame_limit;
+
+typedef struct {
+  int x;
+  int y;
+} mystify_point;
+
+typedef struct {
+  int polygons;
+  int points;
+  int trails;
+  int speed;
+  int colors;
+} mystify_configuration;
+
+typedef struct mystify_state mystify_state;
+
+/* Description of one polygon update.
+ *
+ * erase_points is the oldest polygon to erase when erase_p is non-zero.
+ * draw_points is the newly advanced polygon to draw.
+ *
+ * Both arrays contain point_count points.  The renderer closes the polygon
+ * by connecting the final point back to the first.
+ */
+typedef struct {
+  const mystify_point *erase_points;
+  const mystify_point *draw_points;
+  int point_count;
+  int color_index;
+  int erase_p;
+} mystify_frame;
+
+static mystify_state *
+mystify_state_create (const mystify_configuration *,
+                      unsigned int width,
+                      unsigned int height,
+                      uint32_t seed);
+
+static int
+mystify_state_reset (mystify_state *,
+                     unsigned int width,
+                     unsigned int height);
+
+static void
+mystify_state_free (mystify_state *);
+
+static int
+mystify_state_polygon_count (const mystify_state *);
+
+static void
+mystify_state_step_polygon (mystify_state *,
+                            int polygon,
+                            mystify_frame *);
+
+static void
+mystify_hsv_to_rgb16 (unsigned int hue,
+                      unsigned int count,
+                      unsigned short *red,
+                      unsigned short *green,
+                      unsigned short *blue);
+
+
+typedef struct {
+  mystify_point *history;
+  mystify_point *velocity;
+  mystify_point *erase_points;
+  int slots;
+  int head;
+  int filled;
+  int color_index;
+  int color_step;
+} mystify_wire;
+
+struct mystify_state {
+  mystify_configuration configuration;
+  unsigned int width;
+  unsigned int height;
+  uint32_t rng_state;
+  mystify_wire *wires;
 };
 
-struct wire {
-    XPoint *history;
-    XPoint *velocity;
-    int slots;
-    int head;
-    int filled;
-    int color_index;
-    int color_step;
-};
 
-struct app {
-    Display *dpy;
-    int screen;
-    Window window;
-    bool owns_window;
-    Atom wm_delete;
-    Visual *visual;
-    Colormap colormap;
-    int depth;
-    unsigned int width;
-    unsigned int height;
-    Pixmap backing;
-    GC draw_gc;
-    GC erase_gc;
-    unsigned long black;
-    unsigned long *palette;
-    int palette_count;
-    struct wire *wires;
-    struct options opt;
-};
-
-static volatile sig_atomic_t stop_requested = 0;
-static uint32_t rng_state = 1U;
-
-static void on_signal(int sig)
+static uint32_t
+mystify_rng_next (mystify_state *state)
 {
-    (void)sig;
-    stop_requested = 1;
+  uint32_t x = state->rng_state;
+
+  x ^= x << 13;
+  x ^= x >> 17;
+  x ^= x << 5;
+
+  state->rng_state = (x ? x : 0x6d2b79f5U);
+  return state->rng_state;
 }
 
-static uint32_t rng_next(void)
+
+static int
+mystify_rng_range (mystify_state *state, int low, int high)
 {
-    uint32_t x = rng_state;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    rng_state = x ? x : 0x6d2b79f5U;
-    return rng_state;
+  uint32_t span;
+
+  if (high <= low)
+    return low;
+
+  span = (uint32_t) (high - low + 1);
+  return low + (int) (mystify_rng_next (state) % span);
 }
 
-static int rng_range(int low, int high)
-{
-    uint32_t span;
-
-    if (high <= low)
-        return low;
-    span = (uint32_t)(high - low + 1);
-    return low + (int)(rng_next() % span);
-}
 
 /* A triangular distribution keeps most speeds moderate while still allowing
- * the occasional slow or fast corner. This captures the irregular, organic
- * bounce changes seen in the legacy saver without floating-point arithmetic. */
-static int random_speed(int maximum)
+   the occasional slow or fast corner. */
+static int
+mystify_random_speed (mystify_state *state, int maximum)
 {
-    int minimum = maximum / 6;
-    int span;
-    int a;
-    int b;
+  int minimum = maximum / 6;
+  int span;
+  int a;
+  int b;
 
-    if (minimum < 1)
-        minimum = 1;
-    if (maximum < minimum)
-        maximum = minimum;
+  if (minimum < 1)
+    minimum = 1;
+  if (maximum < minimum)
+    maximum = minimum;
 
-    span = maximum - minimum;
-    a = rng_range(0, span);
-    b = rng_range(0, span);
-    return minimum + ((a + b) / 2);
+  span = maximum - minimum;
+  a = mystify_rng_range (state, 0, span);
+  b = mystify_rng_range (state, 0, span);
+
+  return minimum + ((a + b) / 2);
 }
 
-static int random_velocity(int maximum)
+
+static int
+mystify_random_velocity (mystify_state *state, int maximum)
 {
-    int magnitude = random_speed(maximum);
-    return (rng_next() & 1U) ? magnitude : -magnitude;
+  int magnitude = mystify_random_speed (state, maximum);
+
+  return ((mystify_rng_next (state) & 1U)
+          ? magnitude
+          : -magnitude);
 }
 
-static int clamp_int(int value, int low, int high)
+
+static int
+mystify_clamp (int value, int low, int high)
 {
-    if (value < low)
-        return low;
-    if (value > high)
-        return high;
-    return value;
+  if (value < low)
+    return low;
+  if (value > high)
+    return high;
+
+  return value;
 }
 
-static unsigned long parse_ulong(const char *text, const char *what)
-{
-    char *end = NULL;
-    unsigned long value;
 
-    errno = 0;
-    value = strtoul(text, &end, 0);
-    if (errno != 0 || end == text || *end != '\0') {
-        fprintf(stderr, "%s: invalid %s: %s\n", PROGRAM_NAME, what, text);
-        exit(EXIT_FAILURE);
-    }
-    return value;
+static mystify_point *
+mystify_wire_slot (const mystify_state *state,
+                    mystify_wire *wire,
+                    int slot)
+{
+  return wire->history +
+    ((size_t) slot * (size_t) state->configuration.points);
 }
 
-static int parse_int_option(const char *text, const char *what, int low, int high)
-{
-    unsigned long value = parse_ulong(text, what);
 
-    if (value > (unsigned long)INT_MAX || (int)value < low || (int)value > high) {
-        fprintf(stderr, "%s: %s must be between %d and %d\n",
-                PROGRAM_NAME, what, low, high);
-        exit(EXIT_FAILURE);
-    }
-    return (int)value;
+static void
+mystify_wire_free (mystify_wire *wire)
+{
+  if (!wire)
+    return;
+
+  free (wire->history);
+  free (wire->velocity);
+  free (wire->erase_points);
+
+  memset (wire, 0, sizeof (*wire));
 }
 
-static void usage(FILE *stream)
+
+static int
+mystify_wire_initialize (mystify_state *state,
+                          mystify_wire *wire,
+                          int index)
 {
-    fprintf(stream,
-        "Usage: %s [options]\n"
-        "  -display DISPLAY       X display\n"
-        "  -root                  draw on the root window\n"
-        "  -window                create a normal test window\n"
-        "  -window-id ID          draw into an existing window\n"
-        "  -delay USEC            frame delay (default %u)\n"
-        "  -polys N               polygons (default %d)\n"
-        "  -points N              corners per polygon (default %d)\n"
-        "  -trails N              retained old wires (default %d)\n"
-        "  -speed N               maximum speed (default %d)\n"
-        "  -thickness N           line width (default %d)\n"
-        "  -colors N              hue palette size (default %d)\n"
-        "  -seed N                deterministic random seed\n"
-        "  -frames N              stop after N frames\n"
-        "  -self-test             run internal tests without X11\n"
-        "  -version               print version\n"
-        "  -help                  show this help\n",
-        PROGRAM_NAME, DEFAULT_DELAY_US, DEFAULT_POLYS, DEFAULT_POINTS,
-        DEFAULT_TRAILS, DEFAULT_SPEED, DEFAULT_THICKNESS, DEFAULT_COLORS);
-}
+  const mystify_configuration *configuration = &state->configuration;
+  size_t history_points;
+  mystify_point *initial;
+  int i;
 
-static const char *need_argument(int argc, char **argv, int *index)
-{
-    if (*index + 1 >= argc) {
-        fprintf(stderr, "%s: option %s requires an argument\n",
-                PROGRAM_NAME, argv[*index]);
-        exit(EXIT_FAILURE);
-    }
-    ++(*index);
-    return argv[*index];
-}
+  wire->slots = configuration->trails + 1;
+  wire->head = 0;
+  wire->filled = 1;
+  wire->color_index =
+    (index * configuration->colors) / configuration->polygons;
+  wire->color_step = ((index & 1) ? 1 : -1);
 
-static struct options parse_options(int argc, char **argv)
-{
-    struct options opt = {
-        .display_name = NULL,
-        .requested_window = 0,
-        .have_requested_window = false,
-        .root = false,
-        .create_window = false,
-        .self_test = false,
-        .delay_us = DEFAULT_DELAY_US,
-        .polygons = DEFAULT_POLYS,
-        .points = DEFAULT_POINTS,
-        .trails = DEFAULT_TRAILS,
-        .speed = DEFAULT_SPEED,
-        .thickness = DEFAULT_THICKNESS,
-        .colors = DEFAULT_COLORS,
-        .seed = 0,
-        .seed_set = false,
-        .frame_limit = 0
-    };
-    int i;
+  history_points =
+    (size_t) wire->slots * (size_t) configuration->points;
 
-    for (i = 1; i < argc; ++i) {
-        const char *arg = argv[i];
+  wire->history = (mystify_point *)
+    calloc (history_points, sizeof (*wire->history));
+  wire->velocity = (mystify_point *)
+    calloc ((size_t) configuration->points, sizeof (*wire->velocity));
+  wire->erase_points = (mystify_point *)
+    calloc ((size_t) configuration->points, sizeof (*wire->erase_points));
 
-        if (!strcmp(arg, "-display") || !strcmp(arg, "--display")) {
-            opt.display_name = need_argument(argc, argv, &i);
-        } else if (!strcmp(arg, "-root") || !strcmp(arg, "--root")) {
-            opt.root = true;
-        } else if (!strcmp(arg, "-window") || !strcmp(arg, "--window")) {
-            opt.create_window = true;
-        } else if (!strcmp(arg, "-window-id") || !strcmp(arg, "--window-id") ||
-                   !strcmp(arg, "-wid")) {
-            opt.requested_window = (Window)parse_ulong(
-                need_argument(argc, argv, &i), "window id");
-            opt.have_requested_window = true;
-        } else if (!strcmp(arg, "-delay") || !strcmp(arg, "--delay")) {
-            unsigned long value = parse_ulong(need_argument(argc, argv, &i), "delay");
-            if (value < 1000UL || value > 10000000UL) {
-                fprintf(stderr, "%s: delay must be between 1000 and 10000000 usec\n",
-                        PROGRAM_NAME);
-                exit(EXIT_FAILURE);
-            }
-            opt.delay_us = (unsigned int)value;
-        } else if (!strcmp(arg, "-polys") || !strcmp(arg, "--polys")) {
-            opt.polygons = parse_int_option(need_argument(argc, argv, &i),
-                                            "polys", MIN_POLYS, MAX_POLYS);
-        } else if (!strcmp(arg, "-points") || !strcmp(arg, "--points")) {
-            opt.points = parse_int_option(need_argument(argc, argv, &i),
-                                          "points", MIN_POINTS, MAX_POINTS);
-        } else if (!strcmp(arg, "-trails") || !strcmp(arg, "--trails")) {
-            opt.trails = parse_int_option(need_argument(argc, argv, &i),
-                                          "trails", MIN_TRAILS, MAX_TRAILS);
-        } else if (!strcmp(arg, "-speed") || !strcmp(arg, "--speed")) {
-            opt.speed = parse_int_option(need_argument(argc, argv, &i),
-                                         "speed", MIN_SPEED, MAX_SPEED);
-        } else if (!strcmp(arg, "-thickness") || !strcmp(arg, "--thickness")) {
-            opt.thickness = parse_int_option(need_argument(argc, argv, &i),
-                                             "thickness", MIN_THICKNESS,
-                                             MAX_THICKNESS);
-        } else if (!strcmp(arg, "-colors") || !strcmp(arg, "--colors")) {
-            opt.colors = parse_int_option(need_argument(argc, argv, &i),
-                                          "colors", MIN_COLORS, MAX_COLORS);
-        } else if (!strcmp(arg, "-seed") || !strcmp(arg, "--seed")) {
-            opt.seed = (unsigned int)parse_ulong(need_argument(argc, argv, &i), "seed");
-            opt.seed_set = true;
-        } else if (!strcmp(arg, "-frames") || !strcmp(arg, "--frames")) {
-            opt.frame_limit = parse_ulong(need_argument(argc, argv, &i), "frames");
-        } else if (!strcmp(arg, "-self-test") || !strcmp(arg, "--self-test")) {
-            opt.self_test = true;
-        } else if (!strcmp(arg, "-version") || !strcmp(arg, "--version")) {
-            printf("%s %s\n", PROGRAM_NAME, PROGRAM_VERSION);
-            exit(EXIT_SUCCESS);
-        } else if (!strcmp(arg, "-help") || !strcmp(arg, "--help") ||
-                   !strcmp(arg, "-h")) {
-            usage(stdout);
-            exit(EXIT_SUCCESS);
-        } else if (!strcmp(arg, "-no-db") || !strcmp(arg, "-db") ||
-                   !strcmp(arg, "-fps") || !strcmp(arg, "-no-fps") ||
-                   !strcmp(arg, "-visual")) {
-            /* Compatibility options accepted by many XScreenSaver launchers.
-             * -visual consumes one argument; the others are harmless here. */
-            if (!strcmp(arg, "-visual"))
-                (void)need_argument(argc, argv, &i);
-        } else {
-            fprintf(stderr, "%s: unknown option: %s\n", PROGRAM_NAME, arg);
-            usage(stderr);
-            exit(EXIT_FAILURE);
-        }
+  if (!wire->history || !wire->velocity || !wire->erase_points)
+    {
+      mystify_wire_free (wire);
+      return 0;
     }
 
-    return opt;
+  initial = mystify_wire_slot (state, wire, 0);
+
+  for (i = 0; i < configuration->points; i++)
+    {
+      initial[i].x =
+        mystify_rng_range (state, 0, (int) state->width - 1);
+      initial[i].y =
+        mystify_rng_range (state, 0, (int) state->height - 1);
+
+      wire->velocity[i].x =
+        mystify_random_velocity (state, configuration->speed);
+      wire->velocity[i].y =
+        mystify_random_velocity (state, configuration->speed);
+    }
+
+  for (i = 1; i < wire->slots; i++)
+    memcpy (mystify_wire_slot (state, wire, i),
+            initial,
+            (size_t) configuration->points * sizeof (*initial));
+
+  return 1;
 }
 
-static unsigned long component_mask_to_pixel(unsigned short component,
-                                              unsigned long mask)
-{
-    unsigned int shift = 0;
-    unsigned long normalized;
-    unsigned long max_value;
 
-    if (mask == 0)
+static int
+mystify_advance_coordinate (mystify_state *state,
+                             int old_position,
+                             int *velocity,
+                             int limit)
+{
+  int next;
+
+  if (limit <= 1)
+    {
+      *velocity = 0;
+      return 0;
+    }
+
+  next = old_position + *velocity;
+
+  if (next < 0)
+    {
+      next = -next;
+      *velocity =
+        mystify_random_speed (state, state->configuration.speed);
+    }
+  else if (next >= limit)
+    {
+      next = ((limit - 1) * 2) - next;
+      *velocity =
+        -mystify_random_speed (state, state->configuration.speed);
+    }
+
+  return mystify_clamp (next, 0, limit - 1);
+}
+
+
+static void
+mystify_wires_free (mystify_state *state)
+{
+  int i;
+
+  if (!state || !state->wires)
+    return;
+
+  for (i = 0; i < state->configuration.polygons; i++)
+    mystify_wire_free (&state->wires[i]);
+
+  free (state->wires);
+  state->wires = 0;
+}
+
+
+static int
+mystify_wires_create (mystify_state *state)
+{
+  int i;
+
+  state->wires = (mystify_wire *)
+    calloc ((size_t) state->configuration.polygons,
+            sizeof (*state->wires));
+
+  if (!state->wires)
+    return 0;
+
+  for (i = 0; i < state->configuration.polygons; i++)
+    if (!mystify_wire_initialize (state, &state->wires[i], i))
+      {
+        mystify_wires_free (state);
         return 0;
-    while (((mask >> shift) & 1UL) == 0UL)
-        ++shift;
-    normalized = mask >> shift;
-    max_value = normalized;
-    return (((unsigned long)component * max_value + 32767UL) / 65535UL) << shift;
+      }
+
+  return 1;
 }
 
-static void hsv_to_rgb16(unsigned int hue, unsigned int count,
-                         unsigned short *red, unsigned short *green,
-                         unsigned short *blue)
-{
-    /* Integer HSV with saturation and value fixed at 100%. */
-    unsigned int h6 = (hue % count) * 6U * 65536U / count;
-    unsigned int sector = h6 >> 16;
-    unsigned int fraction = h6 & 0xffffU;
-    unsigned int rising = fraction;
-    unsigned int falling = 65535U - fraction;
 
-    switch (sector % 6U) {
+static mystify_state *
+mystify_state_create (const mystify_configuration *configuration,
+                       unsigned int width,
+                       unsigned int height,
+                       uint32_t seed)
+{
+  mystify_state *state;
+
+  if (!configuration ||
+      configuration->polygons < 1 ||
+      configuration->points < 3 ||
+      configuration->trails < 0 ||
+      configuration->trails == INT_MAX ||
+      configuration->speed < 1 ||
+      configuration->colors < 2 ||
+      width == 0 ||
+      height == 0 ||
+      width > INT_MAX ||
+      height > INT_MAX)
+    return 0;
+
+  state = (mystify_state *) calloc (1, sizeof (*state));
+  if (!state)
+    return 0;
+
+  state->configuration = *configuration;
+  state->rng_state = (seed ? seed : 1U);
+
+  if (!mystify_state_reset (state, width, height))
+    {
+      free (state);
+      return 0;
+    }
+
+  return state;
+}
+
+
+static int
+mystify_state_reset (mystify_state *state,
+                      unsigned int width,
+                      unsigned int height)
+{
+  if (!state ||
+      width == 0 ||
+      height == 0 ||
+      width > INT_MAX ||
+      height > INT_MAX)
+    return 0;
+
+  mystify_wires_free (state);
+
+  state->width = width;
+  state->height = height;
+
+  return mystify_wires_create (state);
+}
+
+
+static void
+mystify_state_free (mystify_state *state)
+{
+  if (!state)
+    return;
+
+  mystify_wires_free (state);
+  free (state);
+}
+
+
+static int
+mystify_state_polygon_count (const mystify_state *state)
+{
+  return (state ? state->configuration.polygons : 0);
+}
+
+
+
+static void
+mystify_state_step_polygon (mystify_state *state,
+                             int polygon,
+                             mystify_frame *frame)
+{
+  mystify_wire *wire;
+  mystify_point *previous;
+  mystify_point *next;
+  int next_slot;
+  int i;
+
+  if (!frame)
+    return;
+
+  memset (frame, 0, sizeof (*frame));
+
+  if (!state ||
+      polygon < 0 ||
+      polygon >= state->configuration.polygons)
+    return;
+
+  wire = &state->wires[polygon];
+  next_slot = (wire->head + 1) % wire->slots;
+  previous = mystify_wire_slot (state, wire, wire->head);
+  next = mystify_wire_slot (state, wire, next_slot);
+
+  if (wire->filled == wire->slots)
+    {
+      memcpy (wire->erase_points,
+              next,
+              (size_t) state->configuration.points * sizeof (*next));
+
+      frame->erase_points = wire->erase_points;
+      frame->erase_p = 1;
+    }
+
+  for (i = 0; i < state->configuration.points; i++)
+    {
+      next[i].x =
+        mystify_advance_coordinate (state,
+                                    previous[i].x,
+                                    &wire->velocity[i].x,
+                                    (int) state->width);
+
+      next[i].y =
+        mystify_advance_coordinate (state,
+                                    previous[i].y,
+                                    &wire->velocity[i].y,
+                                    (int) state->height);
+    }
+
+  wire->head = next_slot;
+
+  if (wire->filled < wire->slots)
+    wire->filled++;
+
+  wire->color_index += wire->color_step;
+
+  if (wire->color_index < 0)
+    wire->color_index = state->configuration.colors - 1;
+  else if (wire->color_index >= state->configuration.colors)
+    wire->color_index = 0;
+
+  frame->draw_points = next;
+  frame->point_count = state->configuration.points;
+  frame->color_index = wire->color_index;
+}
+
+
+static void
+mystify_hsv_to_rgb16 (unsigned int hue,
+                       unsigned int count,
+                       unsigned short *red,
+                       unsigned short *green,
+                       unsigned short *blue)
+{
+  unsigned int h6;
+  unsigned int sector;
+  unsigned int fraction;
+  unsigned int rising;
+  unsigned int falling;
+
+  if (!red || !green || !blue)
+    return;
+
+  if (count == 0)
+    {
+      *red = 0;
+      *green = 0;
+      *blue = 0;
+      return;
+    }
+
+  h6 = (hue % count) * 6U * 65536U / count;
+  sector = h6 >> 16;
+  fraction = h6 & 0xffffU;
+  rising = fraction;
+  falling = 65535U - fraction;
+
+  switch (sector % 6U)
+    {
     case 0:
-        *red = 65535; *green = (unsigned short)rising; *blue = 0; break;
+      *red = 65535;
+      *green = (unsigned short) rising;
+      *blue = 0;
+      break;
+
     case 1:
-        *red = (unsigned short)falling; *green = 65535; *blue = 0; break;
+      *red = (unsigned short) falling;
+      *green = 65535;
+      *blue = 0;
+      break;
+
     case 2:
-        *red = 0; *green = 65535; *blue = (unsigned short)rising; break;
+      *red = 0;
+      *green = 65535;
+      *blue = (unsigned short) rising;
+      break;
+
     case 3:
-        *red = 0; *green = (unsigned short)falling; *blue = 65535; break;
+      *red = 0;
+      *green = (unsigned short) falling;
+      *blue = 65535;
+      break;
+
     case 4:
-        *red = (unsigned short)rising; *green = 0; *blue = 65535; break;
+      *red = (unsigned short) rising;
+      *green = 0;
+      *blue = 65535;
+      break;
+
     default:
-        *red = 65535; *green = 0; *blue = (unsigned short)falling; break;
+      *red = 65535;
+      *green = 0;
+      *blue = (unsigned short) falling;
+      break;
     }
 }
 
-static unsigned long direct_color_pixel(const struct app *app,
-                                        unsigned short red,
-                                        unsigned short green,
-                                        unsigned short blue)
+
+struct mystify {
+  Display *dpy;
+  Window window;
+
+  unsigned int width;
+  unsigned int height;
+  unsigned int depth;
+
+  int delay;
+  int thickness;
+
+  Colormap colormap;
+  Visual *visual;
+  unsigned long black;
+
+  Pixmap backing;
+  GC draw_gc;
+  GC erase_gc;
+
+  unsigned long *palette;
+  int palette_count;
+  Bool allocated_colors_p;
+
+  XPoint *xpoints;
+
+  mystify_configuration configuration;
+  mystify_state *simulation;
+};
+
+
+static int
+clamp_integer (int value, int minimum, int maximum)
 {
-    return component_mask_to_pixel(red, app->visual->red_mask) |
-           component_mask_to_pixel(green, app->visual->green_mask) |
-           component_mask_to_pixel(blue, app->visual->blue_mask);
+  if (value < minimum)
+    return minimum;
+  if (value > maximum)
+    return maximum;
+
+  return value;
 }
 
-static void allocate_palette(struct app *app)
+
+static unsigned long
+component_mask_to_pixel (unsigned short component, unsigned long mask)
 {
-    int requested = app->opt.colors;
-    int allocated = 0;
-    int i;
+  unsigned int shift = 0;
+  unsigned long normalized;
+  unsigned long maximum;
 
-    app->palette = calloc((size_t)requested, sizeof(*app->palette));
-    if (!app->palette) {
-        perror("calloc palette");
-        exit(EXIT_FAILURE);
-    }
+  if (!mask)
+    return 0;
 
-    for (i = 0; i < requested; ++i) {
-        unsigned short red;
-        unsigned short green;
-        unsigned short blue;
-        XColor color;
+  while (((mask >> shift) & 1UL) == 0)
+    shift++;
 
-        hsv_to_rgb16((unsigned int)i, (unsigned int)requested, &red, &green, &blue);
-        color.red = red;
-        color.green = green;
-        color.blue = blue;
-        color.flags = DoRed | DoGreen | DoBlue;
+  normalized = mask >> shift;
+  maximum = normalized;
 
-        if (app->visual->class == TrueColor || app->visual->class == DirectColor) {
-            app->palette[allocated++] = direct_color_pixel(app, red, green, blue);
-        } else if (XAllocColor(app->dpy, app->colormap, &color)) {
-            app->palette[allocated++] = color.pixel;
+  return (((unsigned long) component * maximum + 32767UL) / 65535UL)
+    << shift;
+}
+
+
+static unsigned long
+direct_color_pixel (const struct mystify *state,
+                    unsigned short red,
+                    unsigned short green,
+                    unsigned short blue)
+{
+  return (component_mask_to_pixel (red,   state->visual->red_mask) |
+          component_mask_to_pixel (green, state->visual->green_mask) |
+          component_mask_to_pixel (blue,  state->visual->blue_mask));
+}
+
+
+static void
+allocate_palette (struct mystify *state, int requested)
+{
+  int allocated = 0;
+  int i;
+
+  state->palette = (unsigned long *)
+    calloc ((size_t) requested, sizeof (*state->palette));
+
+  if (!state->palette)
+    abort ();
+
+  state->allocated_colors_p =
+    (state->visual->class != TrueColor &&
+     state->visual->class != DirectColor);
+
+  for (i = 0; i < requested; i++)
+    {
+      unsigned short red;
+      unsigned short green;
+      unsigned short blue;
+
+      mystify_hsv_to_rgb16 ((unsigned int) i,
+                            (unsigned int) requested,
+                            &red, &green, &blue);
+
+      if (!state->allocated_colors_p)
+        {
+          state->palette[allocated++] =
+            direct_color_pixel (state, red, green, blue);
+        }
+      else
+        {
+          XColor color;
+
+          color.red = red;
+          color.green = green;
+          color.blue = blue;
+          color.flags = DoRed | DoGreen | DoBlue;
+
+          if (XAllocColor (state->dpy, state->colormap, &color))
+            state->palette[allocated++] = color.pixel;
         }
     }
 
-    if (allocated < 2) {
-        fprintf(stderr, "%s: unable to allocate a usable color palette\n", PROGRAM_NAME);
-        exit(EXIT_FAILURE);
+  if (allocated < 2)
+    {
+      fprintf (stderr, "%s: unable to allocate a usable color palette\n",
+               progname);
+      abort ();
     }
-    app->palette_count = allocated;
+
+  state->palette_count = allocated;
+  state->configuration.colors = allocated;
 }
 
-static XPoint *wire_slot(const struct app *app, struct wire *wire, int slot)
+
+static void
+draw_polygon (struct mystify *state,
+              Drawable drawable,
+              GC gc,
+              const mystify_point *points,
+              int point_count)
 {
-    size_t stride = (size_t)app->opt.points + 1U;
-    return wire->history + ((size_t)slot * stride);
+  int i;
+
+  for (i = 0; i < point_count; i++)
+    {
+      state->xpoints[i].x = (short) points[i].x;
+      state->xpoints[i].y = (short) points[i].y;
+    }
+
+  state->xpoints[point_count] = state->xpoints[0];
+
+  XDrawLines (state->dpy, drawable, gc,
+              state->xpoints, point_count + 1, CoordModeOrigin);
 }
 
-static void close_polygon(const struct app *app, XPoint *points)
+
+static void
+draw_to_canvas (struct mystify *state,
+                GC gc,
+                const mystify_point *points,
+                int point_count)
 {
-    points[app->opt.points] = points[0];
+  draw_polygon (state, state->backing, gc, points, point_count);
+  draw_polygon (state, state->window,  gc, points, point_count);
 }
 
-static void initialize_wire(struct app *app, struct wire *wire, int index)
+
+static void
+clear_canvas (struct mystify *state)
 {
-    size_t point_count = (size_t)app->opt.points + 1U;
-    size_t history_points;
-    XPoint *initial;
-    int i;
+  XFillRectangle (state->dpy, state->backing, state->erase_gc,
+                  0, 0, state->width, state->height);
 
-    wire->slots = app->opt.trails + 1;
-    wire->head = 0;
-    wire->filled = 1;
-    wire->color_index = (index * app->palette_count) / app->opt.polygons;
-    wire->color_step = (index & 1) ? 1 : -1;
-
-    history_points = (size_t)wire->slots * point_count;
-    wire->history = calloc(history_points, sizeof(*wire->history));
-    wire->velocity = calloc((size_t)app->opt.points, sizeof(*wire->velocity));
-    if (!wire->history || !wire->velocity) {
-        perror("calloc wire");
-        exit(EXIT_FAILURE);
-    }
-
-    initial = wire_slot(app, wire, 0);
-    for (i = 0; i < app->opt.points; ++i) {
-        initial[i].x = (short)rng_range(0, (int)app->width - 1);
-        initial[i].y = (short)rng_range(0, (int)app->height - 1);
-        wire->velocity[i].x = (short)random_velocity(app->opt.speed);
-        wire->velocity[i].y = (short)random_velocity(app->opt.speed);
-    }
-    close_polygon(app, initial);
-
-    for (i = 1; i < wire->slots; ++i)
-        memcpy(wire_slot(app, wire, i), initial, point_count * sizeof(*initial));
+  XFillRectangle (state->dpy, state->window, state->erase_gc,
+                  0, 0, state->width, state->height);
 }
 
-static void free_wires(struct app *app)
+
+static void
+create_backing (struct mystify *state,
+                unsigned int width,
+                unsigned int height)
 {
-    int i;
+  if (state->backing)
+    XFreePixmap (state->dpy, state->backing);
 
-    if (!app->wires)
-        return;
-    for (i = 0; i < app->opt.polygons; ++i) {
-        free(app->wires[i].history);
-        free(app->wires[i].velocity);
+  state->width = width;
+  state->height = height;
+
+  state->backing =
+    XCreatePixmap (state->dpy, state->window,
+                   width, height, state->depth);
+
+  if (!state->backing)
+    {
+      fprintf (stderr, "%s: unable to create backing pixmap\n", progname);
+      abort ();
     }
-    free(app->wires);
-    app->wires = NULL;
+
+  clear_canvas (state);
 }
 
-static void create_wires(struct app *app)
+
+static void
+render_frame (struct mystify *state, const mystify_frame *frame)
 {
-    int i;
+  if (frame->erase_p)
+    draw_to_canvas (state, state->erase_gc,
+                    frame->erase_points, frame->point_count);
 
-    app->wires = calloc((size_t)app->opt.polygons, sizeof(*app->wires));
-    if (!app->wires) {
-        perror("calloc wires");
-        exit(EXIT_FAILURE);
-    }
-    for (i = 0; i < app->opt.polygons; ++i)
-        initialize_wire(app, &app->wires[i], i);
+  XSetForeground (state->dpy, state->draw_gc,
+                  state->palette[frame->color_index]);
+
+  draw_to_canvas (state, state->draw_gc,
+                  frame->draw_points, frame->point_count);
 }
 
-static int advance_coordinate(int old_position, short *velocity,
-                              int limit, int maximum_speed)
+
+static void *
+mystify_init (Display *dpy, Window window)
 {
-    int next;
+  struct mystify *state =
+    (struct mystify *) calloc (1, sizeof (*state));
 
-    if (limit <= 1) {
-        *velocity = 0;
-        return 0;
-    }
+  XWindowAttributes attributes;
+  XGCValues values;
+  int requested_colors;
+  int seed_resource;
+  uint32_t seed;
 
-    next = old_position + *velocity;
-    if (next < 0) {
-        next = -next;
-        *velocity = (short)random_speed(maximum_speed);
-    } else if (next >= limit) {
-        next = ((limit - 1) * 2) - next;
-        *velocity = (short)-random_speed(maximum_speed);
-    }
+  if (!state)
+    abort ();
 
-    return clamp_int(next, 0, limit - 1);
+  state->dpy = dpy;
+  state->window = window;
+
+  XGetWindowAttributes (dpy, window, &attributes);
+
+  state->width = (unsigned int) attributes.width;
+  state->height = (unsigned int) attributes.height;
+  state->depth = (unsigned int) attributes.depth;
+  state->visual = attributes.visual;
+  state->colormap = attributes.colormap;
+  state->black = BlackPixelOfScreen (attributes.screen);
+
+  state->delay =
+    clamp_integer (get_integer_resource (dpy, "delay", "Integer"),
+                   0, INT_MAX);
+
+  state->configuration.polygons =
+    clamp_integer (get_integer_resource (dpy, "polygons", "Integer"),
+                   MIN_POLYGONS, MAX_POLYGONS);
+
+  state->configuration.points =
+    clamp_integer (get_integer_resource (dpy, "points", "Integer"),
+                   MIN_POINTS, MAX_POINTS);
+
+  state->configuration.trails =
+    clamp_integer (get_integer_resource (dpy, "trails", "Integer"),
+                   MIN_TRAILS, MAX_TRAILS);
+
+  state->configuration.speed =
+    clamp_integer (get_integer_resource (dpy, "speed", "Integer"),
+                   MIN_SPEED, MAX_SPEED);
+
+  state->thickness =
+    clamp_integer (get_integer_resource (dpy, "thickness", "Integer"),
+                   MIN_THICKNESS, MAX_THICKNESS);
+
+  requested_colors =
+    clamp_integer (get_integer_resource (dpy, "colors", "Integer"),
+                   MIN_COLORS, MAX_COLORS);
+
+  seed_resource = get_integer_resource (dpy, "seed", "Integer");
+  seed = (seed_resource > 0
+          ? (uint32_t) seed_resource
+          : (uint32_t) random ());
+
+  if (!seed)
+    seed = 1;
+
+  allocate_palette (state, requested_colors);
+
+  values.foreground = state->black;
+  values.background = state->black;
+  values.line_width = state->thickness;
+  values.line_style = LineSolid;
+  values.cap_style = CapButt;
+  values.join_style = JoinBevel;
+
+  state->erase_gc =
+    XCreateGC (dpy, window,
+               GCForeground | GCBackground | GCLineWidth |
+               GCLineStyle | GCCapStyle | GCJoinStyle,
+               &values);
+
+  values.foreground = state->palette[0];
+
+  state->draw_gc =
+    XCreateGC (dpy, window,
+               GCForeground | GCBackground | GCLineWidth |
+               GCLineStyle | GCCapStyle | GCJoinStyle,
+               &values);
+
+  if (!state->erase_gc || !state->draw_gc)
+    abort ();
+
+  state->xpoints = (XPoint *)
+    calloc ((size_t) state->configuration.points + 1,
+            sizeof (*state->xpoints));
+
+  if (!state->xpoints)
+    abort ();
+
+  state->simulation =
+    mystify_state_create (&state->configuration,
+                          state->width, state->height, seed);
+
+  if (!state->simulation)
+    abort ();
+
+  create_backing (state, state->width, state->height);
+
+  return state;
 }
 
-static void draw_polygon(struct app *app, Drawable target, GC gc,
-                         const XPoint *points)
+
+static unsigned long
+mystify_draw (Display *dpy, Window window, void *closure)
 {
-    XDrawLines(app->dpy, target, gc, (XPoint *)points,
-               app->opt.points + 1, CoordModeOrigin);
+  struct mystify *state = (struct mystify *) closure;
+  int polygon;
+
+  (void) dpy;
+  (void) window;
+
+  for (polygon = 0;
+       polygon < mystify_state_polygon_count (state->simulation);
+       polygon++)
+    {
+      mystify_frame frame;
+
+      mystify_state_step_polygon (state->simulation, polygon, &frame);
+      render_frame (state, &frame);
+    }
+
+  return (unsigned long) state->delay;
 }
 
-static void draw_to_both(struct app *app, GC gc, const XPoint *points)
+
+static void
+mystify_reshape (Display *dpy, Window window, void *closure,
+                 unsigned int width, unsigned int height)
 {
-    draw_polygon(app, app->backing, gc, points);
-    draw_polygon(app, app->window, gc, points);
+  struct mystify *state = (struct mystify *) closure;
+
+  (void) dpy;
+  (void) window;
+
+  if (!width || !height)
+    return;
+
+  if (width == state->width && height == state->height)
+    return;
+
+  if (!mystify_state_reset (state->simulation, width, height))
+    abort ();
+
+  create_backing (state, width, height);
 }
 
-static void advance_wire(struct app *app, struct wire *wire)
+
+static Bool
+mystify_event (Display *dpy, Window window, void *closure, XEvent *event)
 {
-    int next_slot = (wire->head + 1) % wire->slots;
-    XPoint *previous = wire_slot(app, wire, wire->head);
-    XPoint *next = wire_slot(app, wire, next_slot);
-    int i;
+  struct mystify *state = (struct mystify *) closure;
 
-    if (wire->filled == wire->slots)
-        draw_to_both(app, app->erase_gc, next);
+  (void) dpy;
+  (void) window;
 
-    for (i = 0; i < app->opt.points; ++i) {
-        next[i].x = (short)advance_coordinate(previous[i].x,
-                                               &wire->velocity[i].x,
-                                               (int)app->width,
-                                               app->opt.speed);
-        next[i].y = (short)advance_coordinate(previous[i].y,
-                                               &wire->velocity[i].y,
-                                               (int)app->height,
-                                               app->opt.speed);
+  if (event->xany.type == Expose && state->backing)
+    {
+      const XExposeEvent *expose = &event->xexpose;
+
+      XCopyArea (state->dpy,
+                 state->backing,
+                 state->window,
+                 state->draw_gc,
+                 expose->x,
+                 expose->y,
+                 (unsigned int) expose->width,
+                 (unsigned int) expose->height,
+                 expose->x,
+                 expose->y);
     }
-    close_polygon(app, next);
 
-    wire->head = next_slot;
-    if (wire->filled < wire->slots)
-        ++wire->filled;
-
-    wire->color_index += wire->color_step;
-    if (wire->color_index < 0)
-        wire->color_index = app->palette_count - 1;
-    else if (wire->color_index >= app->palette_count)
-        wire->color_index = 0;
-
-    XSetForeground(app->dpy, app->draw_gc, app->palette[wire->color_index]);
-    draw_to_both(app, app->draw_gc, next);
+  return False;
 }
 
-static void clear_canvas(struct app *app)
+
+static void
+mystify_free (Display *dpy, Window window, void *closure)
 {
-    XFillRectangle(app->dpy, app->backing, app->erase_gc,
-                   0, 0, app->width, app->height);
-    XFillRectangle(app->dpy, app->window, app->erase_gc,
-                   0, 0, app->width, app->height);
+  struct mystify *state = (struct mystify *) closure;
+
+  (void) window;
+
+  if (!state)
+    return;
+
+  mystify_state_free (state->simulation);
+
+  if (state->backing)
+    XFreePixmap (dpy, state->backing);
+
+  if (state->draw_gc)
+    XFreeGC (dpy, state->draw_gc);
+
+  if (state->erase_gc)
+    XFreeGC (dpy, state->erase_gc);
+
+  if (state->allocated_colors_p && state->palette_count)
+    XFreeColors (dpy, state->colormap,
+                 state->palette, state->palette_count, 0);
+
+  free (state->palette);
+  free (state->xpoints);
+  free (state);
 }
 
-static void recreate_backing(struct app *app, unsigned int width,
-                             unsigned int height)
-{
-    if (width == 0 || height == 0)
-        return;
 
-    if (app->backing)
-        XFreePixmap(app->dpy, app->backing);
-    app->width = width;
-    app->height = height;
-    app->backing = XCreatePixmap(app->dpy, app->window, width, height,
-                                 (unsigned int)app->depth);
-    if (!app->backing) {
-        fprintf(stderr, "%s: unable to create backing pixmap\n", PROGRAM_NAME);
-        exit(EXIT_FAILURE);
-    }
+static const char *mystify_defaults[] = {
+  ".background: black",
+  ".foreground: white",
+  "*fpsSolid: true",
+  "*delay: 30000",
+  "*polygons: 2",
+  "*points: 4",
+  "*trails: 5",
+  "*speed: 14",
+  "*thickness: 1",
+  "*colors: 64",
+  "*seed: 0",
+  0
+};
 
-    free_wires(app);
-    create_wires(app);
-    clear_canvas(app);
-}
 
-static Window window_from_environment(void)
-{
-    const char *value = getenv("XSCREENSAVER_WINDOW");
+static XrmOptionDescRec mystify_options[] = {
+  { "-delay",     ".delay",     XrmoptionSepArg, 0 },
+  { "-polys",     ".polygons",  XrmoptionSepArg, 0 },
+  { "-points",    ".points",    XrmoptionSepArg, 0 },
+  { "-trails",    ".trails",    XrmoptionSepArg, 0 },
+  { "-speed",     ".speed",     XrmoptionSepArg, 0 },
+  { "-thickness", ".thickness", XrmoptionSepArg, 0 },
+  { "-colors",    ".colors",    XrmoptionSepArg, 0 },
+  { "-seed",      ".seed",      XrmoptionSepArg, 0 },
+  { 0, 0, 0, 0 }
+};
 
-    if (!value || !*value)
-        return 0;
-    return (Window)parse_ulong(value, "XSCREENSAVER_WINDOW");
-}
 
-static Window create_test_window(struct app *app)
-{
-    XSetWindowAttributes attrs;
-    unsigned long mask = CWBackPixel | CWEventMask;
-    Window window;
-
-    attrs.background_pixel = app->black;
-    attrs.event_mask = ExposureMask | StructureNotifyMask | KeyPressMask |
-                       ButtonPressMask;
-    window = XCreateWindow(app->dpy, RootWindow(app->dpy, app->screen),
-                           0, 0, 800, 600, 0, app->depth, InputOutput,
-                           app->visual, mask, &attrs);
-    if (!window) {
-        fprintf(stderr, "%s: unable to create test window\n", PROGRAM_NAME);
-        exit(EXIT_FAILURE);
-    }
-
-    XStoreName(app->dpy, window, "Mystify for XScreenSaver");
-    app->wm_delete = XInternAtom(app->dpy, "WM_DELETE_WINDOW", False);
-    XSetWMProtocols(app->dpy, window, &app->wm_delete, 1);
-    XMapRaised(app->dpy, window);
-    app->owns_window = true;
-    return window;
-}
-
-static void setup_x(struct app *app)
-{
-    XWindowAttributes attrs;
-    XGCValues values;
-    Window env_window;
-
-    app->dpy = XOpenDisplay(app->opt.display_name);
-    if (!app->dpy) {
-        fprintf(stderr, "%s: unable to open display %s\n", PROGRAM_NAME,
-                app->opt.display_name ? app->opt.display_name : "(default)");
-        exit(EXIT_FAILURE);
-    }
-
-    app->screen = DefaultScreen(app->dpy);
-    app->visual = DefaultVisual(app->dpy, app->screen);
-    app->colormap = DefaultColormap(app->dpy, app->screen);
-    app->depth = DefaultDepth(app->dpy, app->screen);
-    app->black = BlackPixel(app->dpy, app->screen);
-
-    env_window = window_from_environment();
-    if (app->opt.have_requested_window) {
-        app->window = app->opt.requested_window;
-    } else if (env_window) {
-        app->window = env_window;
-    } else if (app->opt.root) {
-        app->window = RootWindow(app->dpy, app->screen);
-    } else {
-        app->window = create_test_window(app);
-    }
-
-    if (!XGetWindowAttributes(app->dpy, app->window, &attrs)) {
-        fprintf(stderr, "%s: cannot query target window 0x%lx\n",
-                PROGRAM_NAME, (unsigned long)app->window);
-        exit(EXIT_FAILURE);
-    }
-
-    app->visual = attrs.visual;
-    app->colormap = attrs.colormap;
-    app->depth = attrs.depth;
-    app->width = (unsigned int)attrs.width;
-    app->height = (unsigned int)attrs.height;
-
-    if (!app->opt.root) {
-        XSelectInput(app->dpy, app->window,
-                     ExposureMask | StructureNotifyMask | KeyPressMask |
-                     ButtonPressMask);
-    }
-
-    allocate_palette(app);
-
-    values.foreground = app->black;
-    values.background = app->black;
-    values.line_width = app->opt.thickness;
-    values.line_style = LineSolid;
-    values.cap_style = CapButt;
-    values.join_style = JoinBevel;
-    app->erase_gc = XCreateGC(app->dpy, app->window,
-                              GCForeground | GCBackground | GCLineWidth |
-                              GCLineStyle | GCCapStyle | GCJoinStyle, &values);
-
-    values.foreground = app->palette[0];
-    app->draw_gc = XCreateGC(app->dpy, app->window,
-                             GCForeground | GCBackground | GCLineWidth |
-                             GCLineStyle | GCCapStyle | GCJoinStyle, &values);
-    if (!app->erase_gc || !app->draw_gc) {
-        fprintf(stderr, "%s: unable to create X graphics contexts\n", PROGRAM_NAME);
-        exit(EXIT_FAILURE);
-    }
-
-    app->backing = 0;
-    app->wires = NULL;
-    recreate_backing(app, app->width, app->height);
-    XFlush(app->dpy);
-}
-
-static void copy_exposed_area(struct app *app, const XExposeEvent *expose)
-{
-    XCopyArea(app->dpy, app->backing, app->window, app->draw_gc,
-              expose->x, expose->y,
-              (unsigned int)expose->width, (unsigned int)expose->height,
-              expose->x, expose->y);
-}
-
-static void process_events(struct app *app)
-{
-    while (XPending(app->dpy)) {
-        XEvent event;
-        XNextEvent(app->dpy, &event);
-
-        switch (event.type) {
-        case Expose:
-            copy_exposed_area(app, &event.xexpose);
-            break;
-        case ConfigureNotify:
-            if ((unsigned int)event.xconfigure.width != app->width ||
-                (unsigned int)event.xconfigure.height != app->height) {
-                recreate_backing(app,
-                                 (unsigned int)event.xconfigure.width,
-                                 (unsigned int)event.xconfigure.height);
-            }
-            break;
-        case ClientMessage:
-            if (app->owns_window &&
-                (Atom)event.xclient.data.l[0] == app->wm_delete)
-                stop_requested = 1;
-            break;
-        case DestroyNotify:
-            stop_requested = 1;
-            break;
-        case KeyPress:
-        case ButtonPress:
-            if (app->owns_window)
-                stop_requested = 1;
-            break;
-        default:
-            break;
-        }
-    }
-}
-
-static void sleep_delay(unsigned int microseconds)
-{
-    struct timespec requested;
-    struct timespec remaining;
-
-    requested.tv_sec = (time_t)(microseconds / 1000000U);
-    requested.tv_nsec = (long)(microseconds % 1000000U) * 1000L;
-    while (nanosleep(&requested, &remaining) != 0 && errno == EINTR) {
-        if (stop_requested)
-            return;
-        requested = remaining;
-    }
-}
-
-static void run_animation(struct app *app)
-{
-    unsigned long frame = 0;
-    int i;
-
-    while (!stop_requested &&
-           (app->opt.frame_limit == 0 || frame < app->opt.frame_limit)) {
-        process_events(app);
-        for (i = 0; i < app->opt.polygons; ++i)
-            advance_wire(app, &app->wires[i]);
-        XFlush(app->dpy);
-        ++frame;
-        sleep_delay(app->opt.delay_us);
-    }
-}
-
-static void cleanup(struct app *app)
-{
-    free_wires(app);
-    free(app->palette);
-    if (app->backing)
-        XFreePixmap(app->dpy, app->backing);
-    if (app->draw_gc)
-        XFreeGC(app->dpy, app->draw_gc);
-    if (app->erase_gc)
-        XFreeGC(app->dpy, app->erase_gc);
-    if (app->owns_window && app->window)
-        XDestroyWindow(app->dpy, app->window);
-    if (app->dpy)
-        XCloseDisplay(app->dpy);
-}
-
-static int self_test(void)
-{
-    short velocity;
-    int position;
-    int i;
-
-    rng_state = 0x12345678U;
-    for (i = 0; i < 10000; ++i) {
-        int speed = random_speed(17);
-        if (speed < 2 || speed > 17) {
-            fprintf(stderr, "self-test: random speed out of range: %d\n", speed);
-            return EXIT_FAILURE;
-        }
-    }
-
-    velocity = -7;
-    position = advance_coordinate(2, &velocity, 100, 17);
-    if (position != 5 || velocity <= 0) {
-        fprintf(stderr, "self-test: left reflection failed\n");
-        return EXIT_FAILURE;
-    }
-
-    velocity = 7;
-    position = advance_coordinate(97, &velocity, 100, 17);
-    if (position != 94 || velocity >= 0) {
-        fprintf(stderr, "self-test: right reflection failed\n");
-        return EXIT_FAILURE;
-    }
-
-    puts("mystify self-test: PASS");
-    return EXIT_SUCCESS;
-}
-
-int main(int argc, char **argv)
-{
-    struct app app;
-    struct sigaction action;
-
-    memset(&app, 0, sizeof(app));
-    app.opt = parse_options(argc, argv);
-    if (app.opt.self_test)
-        return self_test();
-
-    if (app.opt.seed_set) {
-        rng_state = app.opt.seed ? app.opt.seed : 1U;
-    } else {
-        struct timespec now;
-        clock_gettime(CLOCK_REALTIME, &now);
-        rng_state = (uint32_t)now.tv_nsec ^ (uint32_t)now.tv_sec ^
-                    (uint32_t)getpid();
-        if (!rng_state)
-            rng_state = 1U;
-    }
-
-    memset(&action, 0, sizeof(action));
-    action.sa_handler = on_signal;
-    sigemptyset(&action.sa_mask);
-    sigaction(SIGINT, &action, NULL);
-    sigaction(SIGTERM, &action, NULL);
-    sigaction(SIGHUP, &action, NULL);
-
-    setup_x(&app);
-    run_animation(&app);
-    cleanup(&app);
-    return EXIT_SUCCESS;
-}
+XSCREENSAVER_MODULE ("Mystify", mystify)

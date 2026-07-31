@@ -1,96 +1,95 @@
-.TH MYSTIFY 6 "June 2026" "mystify 0.1.0" "XScreenSaver display hacks"
+.TH XScreenSaver 1 "09-Jun-2026" "X Version 11"
 .SH NAME
-mystify \- nostalgic bouncing wire polygons for XScreenSaver
+mystify \- animate bouncing, deforming wire polygons
 .SH SYNOPSIS
 .B mystify
-.RB [ \-display
-display]
-.RB [ \-root ]
-.RB [ \-window ]
-.RB [ \-window-id
-id]
-.RB [ \-delay
-microseconds]
-.RB [ \-polys
-number]
-.RB [ \-points
-number]
-.RB [ \-trails
-number]
-.RB [ \-speed
-number]
-.RB [ \-thickness
-pixels]
-.RB [ \-colors
-number]
+[\-\-display \fIhost:display.screen\fP]
+[\-\-window]
+[\-\-root]
+[\-\-window\-id \fInumber\fP]
+[\-\-delay \fImicroseconds\fP]
+[\-\-polys \fInumber\fP]
+[\-\-points \fInumber\fP]
+[\-\-trails \fInumber\fP]
+[\-\-speed \fInumber\fP]
+[\-\-thickness \fIpixels\fP]
+[\-\-colors \fInumber\fP]
+[\-\-seed \fInumber\fP]
+[\-\-fps]
 .SH DESCRIPTION
-.B mystify
-animates deforming wire polygons whose corners move independently and change
-speed when they bounce from the edges of the window.
+The
+.I mystify
+program animates deforming wire polygons whose corners move independently and
+change speed when they bounce from the edges of the window.
 .PP
-It is inspired by the Windows 95/98 "Mystify Your Mind" screensaver. Instead
-of clearing or redrawing the whole frame, it draws one new wire and erases
-only the oldest retained wire with black. This is both lightweight and
-responsible for the characteristic tiny black gaps where old and new wires
-cross.
+It is inspired by the Windows 95 and Windows 98
+``Mystify Your Mind'' screen saver.
+.PP
+Instead of clearing and redrawing the whole frame, it draws one new wire and
+erases only the oldest retained wire with a black line. This economical
+rendering method produces the characteristic tiny black gaps where an erased
+old wire crosses a newer wire.
 .SH OPTIONS
-.TP
-.B \-root
+.I mystify
+accepts the following options:
+.TP 8
+.B \-\-window
+Draw on a newly-created window. This is the default.
+.TP 8
+.B \-\-root
 Draw on the root window.
-.TP
-.B \-window
-Create a normal 800 by 600 test window. This is the default when no root or
-external window is supplied.
-.TP
-.BI \-window-id " id"
-Draw into an existing X window. The environment variable
-.B XSCREENSAVER_WINDOW
-is also recognized.
-.TP
-.BI \-delay " microseconds"
-Delay between frames. Default: 30000.
-.TP
-.BI \-polys " number"
+.TP 8
+.BI \-\-window\-id " number"
+Draw on the specified window.
+.TP 8
+.BI \-\-delay " microseconds"
+Delay between animation frames. Default: 30000.
+.TP 8
+.BI \-\-polys " number"
 Number of independently moving polygons. Default: 2.
-.TP
-.BI \-points " number"
-Corners per polygon. Default: 4.
-.TP
-.BI \-trails " number"
+.TP 8
+.BI \-\-points " number"
+Number of corners in each polygon. Default: 4.
+.TP 8
+.BI \-\-trails " number"
 Number of old wires retained behind each leading wire. Default: 5.
-.TP
-.BI \-speed " number"
-Maximum corner velocity. Default: 14 pixels per frame.
-.TP
-.BI \-thickness " pixels"
+.TP 8
+.BI \-\-speed " number"
+Maximum corner velocity in pixels per frame. Default: 14.
+.TP 8
+.BI \-\-thickness " pixels"
 Line thickness. Default: 1.
-.TP
-.BI \-colors " number"
-Number of hue steps in the allocated palette. Default: 64.
-.TP
-.BI \-seed " number"
-Use a deterministic random seed.
-.TP
-.BI \-frames " number"
-Exit after a number of frames. Intended for testing.
-.TP
-.B \-self-test
-Run non-graphical internal tests and exit.
+.TP 8
+.BI \-\-colors " number"
+Number of hue steps in the color palette. Default: 64.
+.TP 8
+.BI \-\-seed " number"
+Use a deterministic random seed. A value of zero selects a random seed.
+.TP 8
+.B \-\-fps
+Display the current frame rate and CPU load.
 .SH ENVIRONMENT
-.TP
+.TP 8
 .B DISPLAY
-Default X display.
-.TP
+The X display to use.
+.TP 8
+.B XENVIRONMENT
+The resource file that overrides resources stored in the
+RESOURCE_MANAGER property.
+.TP 8
 .B XSCREENSAVER_WINDOW
-Existing target window supplied by XScreenSaver.
+The window ID supplied by XScreenSaver when running with
+.BR \-\-root .
 .SH SEE ALSO
-.BR xscreensaver (1),
-.BR xscreensaver-settings (1),
-.BR X (7)
-.SH AUTHORS
-Reaper <JohnGrimmReaper@disroot.org>.
-.SH LICENSE
-This software is distributed under the X11 License.
-See the
-.B LICENSE
-file included with the source code.
+.BR X (1),
+.BR xscreensaver (1)
+.SH COPYRIGHT
+Copyright \(co 2026 Reaper.
+Permission to use, copy, modify, distribute, and sell this software and its
+documentation for any purpose is hereby granted without fee, provided that
+the above copyright notice appear in all copies and that both that copyright
+notice and this permission notice appear in supporting documentation.
+No representations are made about the suitability of this software for any
+purpose. It is provided ``as is'' without express or implied warranty.
+.SH AUTHOR
+Reaper <JohnGrimmReaper@disroot.org>, 2026.
