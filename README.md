@@ -29,33 +29,112 @@ to compile the unmodified hack as an independent executable.
 The display-hack source should remain byte-for-byte identical to
 `hacks/mystify.c` at the recorded XScreenSaver commit.
 
-## Building
+## Building and installing without a package
 
-```sh
-make
-make check
-./mystify -window
-```
+This generic build path can be used on any Unix-like distribution with the
+required development tools and X11 libraries.
 
 Build requirements:
 
 - a C17 compiler;
+- `make`;
 - `pkg-config`;
-- Xlib development headers and libraries.
+- Xlib development headers and libraries;
+- an existing XScreenSaver installation if Mystify will be used as a display
+  hack.
 
 On Debian or Ubuntu:
 
 ```sh
-sudo apt install build-essential pkgconf libx11-dev
+sudo apt update
+sudo apt install build-essential pkgconf libx11-dev xscreensaver
 ```
 
 On Fedora, RHEL, Rocky Linux, or AlmaLinux with EPEL enabled:
 
 ```sh
-sudo dnf install gcc make pkgconf-pkg-config libX11-devel   desktop-file-utils rpm-build rpmdevtools xscreensaver-base
+sudo dnf install gcc make pkgconf-pkg-config libX11-devel xscreensaver-base
+```
+
+On another distribution, install the equivalent compiler, `make`,
+`pkg-config`, Xlib development package, and XScreenSaver runtime package.
+
+Compile and test Mystify from the top-level source directory:
+
+```sh
+make
+make check
+```
+
+Run the compiled program directly without installing it:
+
+```sh
+./mystify -window
+```
+
+Install the executable and XML configuration directly, without creating a
+distribution package:
+
+```sh
+sudo make install
+```
+
+The default manual installation paths are:
+
+```text
+/usr/libexec/xscreensaver/mystify
+/usr/share/xscreensaver/config/mystify.xml
+```
+
+Distributions with a different XScreenSaver filesystem layout can override
+`PREFIX`, `LIBEXECDIR`, and `SYSCONFDIR` when running `make install`.
+
+## Building distribution packages
+
+### Debian or Ubuntu
+
+Install the Debian packaging dependencies:
+
+```sh
+sudo apt update
+sudo apt install build-essential debhelper pkgconf libx11-dev
+```
+
+Build an unsigned binary package from the top-level source directory:
+
+```sh
+dpkg-buildpackage -b -us -uc
+```
+
+The generated `.deb` package and related build artifacts are written to the
+parent directory.
+
+### Fedora, RHEL, Rocky Linux, or AlmaLinux
+
+On Enterprise Linux, enable EPEL first so the resulting package can use the
+EPEL `xscreensaver-base` runtime dependency.
+
+Install the RPM build tools and build dependencies:
+
+```sh
+sudo dnf install gcc make pkgconf-pkg-config libX11-devel \
+  desktop-file-utils rpm-build rpmdevtools xscreensaver-base
+```
+
+Create the standard RPM build tree, download the tagged source archive declared
+by the spec, and build both the source and binary RPMs:
+
+```sh
 rpmdev-setuptree
 spectool -g -R xscreensaver-mystify.spec
 rpmbuild -ba xscreensaver-mystify.spec
+```
+
+The generated packages are written beneath:
+
+```text
+~/rpmbuild/SRPMS/
+~/rpmbuild/RPMS/<architecture>/
 ```
 
 The RPM spec follows Fedora and EPEL's non-OpenGL XScreenSaver hack layout.
