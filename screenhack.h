@@ -9,6 +9,10 @@ extern char *progname;
 int get_integer_resource(Display *dpy, const char *name,
                          const char *resource_class);
 
+unsigned int get_pixel_resource(Display *dpy, Colormap colormap,
+                                const char *name,
+                                const char *resource_class);
+
 typedef void *(*screenhack_init_fn)(Display *, Window);
 typedef unsigned long (*screenhack_draw_fn)(Display *, Window, void *);
 typedef void (*screenhack_reshape_fn)(Display *, Window, void *,

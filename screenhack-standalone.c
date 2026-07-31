@@ -222,6 +222,36 @@ get_integer_resource(Display *dpy, const char *name,
   return (int) parsed;
 }
 
+
+unsigned int
+get_pixel_resource(Display *dpy, Colormap colormap,
+                   const char *name, const char *resource_class)
+{
+  const char *value = resource_get(name);
+  XColor color;
+
+  (void) resource_class;
+
+  if (!value)
+    value = "black";
+
+  if (!XParseColor(dpy, colormap, value, &color) ||
+      !XAllocColor(dpy, colormap, &color)) {
+    fprintf(stderr, "%s: unable to allocate color resource %s: %s\n",
+            progname, name, value);
+    exit(EXIT_FAILURE);
+  }
+
+  if (color.pixel > UINT_MAX) {
+    fprintf(stderr, "%s: color pixel is outside the supported range\n",
+            progname);
+    exit(EXIT_FAILURE);
+  }
+
+  return (unsigned int) color.pixel;
+}
+
+
 static unsigned long
 parse_unsigned_long(const char *text, const char *description)
 {

@@ -15,13 +15,14 @@ authoritative XScreenSaver implementation.
 Current synchronized source commit:
 
 ```text
-5b739903e0011143bba1da127216dbfb29fddf42
-mystify: fold private simulation core into hack
+f1a60a3ab34d70e76749e24ff48fadd4598d03bd
+mystify: allocate colors through XScreenSaver utilities
 ```
 
-The standalone-only files `screenhack.h` and `screenhack-standalone.c` provide
-the small part of the XScreenSaver module lifecycle needed to compile the
-unmodified hack as an independent executable.
+The standalone-only files `screenhack.h`, `screenhack-standalone.c`,
+`colors.h`, and `colors-standalone.c` provide the small parts of the
+XScreenSaver module lifecycle, resource handling, and color allocation needed
+to compile the unmodified hack as an independent executable.
 
 The display-hack source should remain byte-for-byte identical to
 `hacks/mystify.c` at the recorded XScreenSaver commit.

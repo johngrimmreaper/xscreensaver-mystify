@@ -10,6 +10,7 @@
  */
 
 #include "screenhack.h"
+#include "colors.h"
 
 #include <limits.h>
 #include <stdint.h>
@@ -83,13 +84,6 @@ static void
 mystify_state_step_polygon (mystify_state *,
                             int polygon,
                             mystify_frame *);
-
-static void
-mystify_hsv_to_rgb16 (unsigned int hue,
-                      unsigned int count,
-                      unsigned short *red,
-                      unsigned short *green,
-                      unsigned short *blue);
 
 
 typedef struct {
@@ -485,80 +479,11 @@ mystify_state_step_polygon (mystify_state *state,
 }
 
 
-static void
-mystify_hsv_to_rgb16 (unsigned int hue,
-                       unsigned int count,
-                       unsigned short *red,
-                       unsigned short *green,
-                       unsigned short *blue)
-{
-  unsigned int h6;
-  unsigned int sector;
-  unsigned int fraction;
-  unsigned int rising;
-  unsigned int falling;
-
-  if (!red || !green || !blue)
-    return;
-
-  if (count == 0)
-    {
-      *red = 0;
-      *green = 0;
-      *blue = 0;
-      return;
-    }
-
-  h6 = (hue % count) * 6U * 65536U / count;
-  sector = h6 >> 16;
-  fraction = h6 & 0xffffU;
-  rising = fraction;
-  falling = 65535U - fraction;
-
-  switch (sector % 6U)
-    {
-    case 0:
-      *red = 65535;
-      *green = (unsigned short) rising;
-      *blue = 0;
-      break;
-
-    case 1:
-      *red = (unsigned short) falling;
-      *green = 65535;
-      *blue = 0;
-      break;
-
-    case 2:
-      *red = 0;
-      *green = 65535;
-      *blue = (unsigned short) rising;
-      break;
-
-    case 3:
-      *red = 0;
-      *green = (unsigned short) falling;
-      *blue = 65535;
-      break;
-
-    case 4:
-      *red = (unsigned short) rising;
-      *green = 0;
-      *blue = 65535;
-      break;
-
-    default:
-      *red = 65535;
-      *green = 0;
-      *blue = (unsigned short) falling;
-      break;
-    }
-}
-
 
 struct mystify {
   Display *dpy;
   Window window;
+  Screen *screen;
 
   unsigned int width;
   unsigned int height;
@@ -569,15 +494,14 @@ struct mystify {
 
   Colormap colormap;
   Visual *visual;
-  unsigned long black;
+  unsigned long background;
 
   Pixmap backing;
   GC draw_gc;
   GC erase_gc;
 
-  unsigned long *palette;
+  XColor *palette;
   int palette_count;
-  Bool allocated_colors_p;
 
   XPoint *xpoints;
 
@@ -598,87 +522,32 @@ clamp_integer (int value, int minimum, int maximum)
 }
 
 
-static unsigned long
-component_mask_to_pixel (unsigned short component, unsigned long mask)
-{
-  unsigned int shift = 0;
-  unsigned long normalized;
-  unsigned long maximum;
-
-  if (!mask)
-    return 0;
-
-  while (((mask >> shift) & 1UL) == 0)
-    shift++;
-
-  normalized = mask >> shift;
-  maximum = normalized;
-
-  return (((unsigned long) component * maximum + 32767UL) / 65535UL)
-    << shift;
-}
-
-
-static unsigned long
-direct_color_pixel (const struct mystify *state,
-                    unsigned short red,
-                    unsigned short green,
-                    unsigned short blue)
-{
-  return (component_mask_to_pixel (red,   state->visual->red_mask) |
-          component_mask_to_pixel (green, state->visual->green_mask) |
-          component_mask_to_pixel (blue,  state->visual->blue_mask));
-}
-
-
 static void
 allocate_palette (struct mystify *state, int requested)
 {
-  int allocated = 0;
-  int i;
+  int allocated = requested;
 
-  state->palette = (unsigned long *)
+  state->palette = (XColor *)
     calloc ((size_t) requested, sizeof (*state->palette));
 
   if (!state->palette)
     abort ();
 
-  state->allocated_colors_p =
-    (state->visual->class != TrueColor &&
-     state->visual->class != DirectColor);
-
-  for (i = 0; i < requested; i++)
-    {
-      unsigned short red;
-      unsigned short green;
-      unsigned short blue;
-
-      mystify_hsv_to_rgb16 ((unsigned int) i,
-                            (unsigned int) requested,
-                            &red, &green, &blue);
-
-      if (!state->allocated_colors_p)
-        {
-          state->palette[allocated++] =
-            direct_color_pixel (state, red, green, blue);
-        }
-      else
-        {
-          XColor color;
-
-          color.red = red;
-          color.green = green;
-          color.blue = blue;
-          color.flags = DoRed | DoGreen | DoBlue;
-
-          if (XAllocColor (state->dpy, state->colormap, &color))
-            state->palette[allocated++] = color.pixel;
-        }
-    }
+  make_color_ramp (state->screen,
+                   state->visual,
+                   state->colormap,
+                   0,   1.0, 1.0,
+                   359, 1.0, 1.0,
+                   state->palette,
+                   &allocated,
+                   False,
+                   True,
+                   0);
 
   if (allocated < 2)
     {
-      fprintf (stderr, "%s: unable to allocate a usable color palette\n",
+      fprintf (stderr,
+               "%s: unable to allocate a usable color palette\n",
                progname);
       abort ();
     }
@@ -765,7 +634,7 @@ render_frame (struct mystify *state, const mystify_frame *frame)
                     frame->erase_points, frame->point_count);
 
   XSetForeground (state->dpy, state->draw_gc,
-                  state->palette[frame->color_index]);
+                  state->palette[frame->color_index].pixel);
 
   draw_to_canvas (state, state->draw_gc,
                   frame->draw_points, frame->point_count);
@@ -792,12 +661,15 @@ mystify_init (Display *dpy, Window window)
 
   XGetWindowAttributes (dpy, window, &attributes);
 
+  state->screen = attributes.screen;
   state->width = (unsigned int) attributes.width;
   state->height = (unsigned int) attributes.height;
   state->depth = (unsigned int) attributes.depth;
   state->visual = attributes.visual;
   state->colormap = attributes.colormap;
-  state->black = BlackPixelOfScreen (attributes.screen);
+  state->background =
+    get_pixel_resource (dpy, state->colormap,
+                        "background", "Background");
 
   state->delay =
     clamp_integer (get_integer_resource (dpy, "delay", "Integer"),
@@ -837,8 +709,8 @@ mystify_init (Display *dpy, Window window)
 
   allocate_palette (state, requested_colors);
 
-  values.foreground = state->black;
-  values.background = state->black;
+  values.foreground = state->background;
+  values.background = state->background;
   values.line_width = state->thickness;
   values.line_style = LineSolid;
   values.cap_style = CapButt;
@@ -850,7 +722,7 @@ mystify_init (Display *dpy, Window window)
                GCLineStyle | GCCapStyle | GCJoinStyle,
                &values);
 
-  values.foreground = state->palette[0];
+  values.foreground = state->palette[0].pixel;
 
   state->draw_gc =
     XCreateGC (dpy, window,
@@ -975,9 +847,9 @@ mystify_free (Display *dpy, Window window, void *closure)
   if (state->erase_gc)
     XFreeGC (dpy, state->erase_gc);
 
-  if (state->allocated_colors_p && state->palette_count)
-    XFreeColors (dpy, state->colormap,
-                 state->palette, state->palette_count, 0);
+  if (state->palette_count)
+    free_colors (state->screen, state->colormap,
+                 state->palette, state->palette_count);
 
   free (state->palette);
   free (state->xpoints);
