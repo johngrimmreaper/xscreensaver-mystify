@@ -1,4 +1,5 @@
 CC ?= cc
+VERSION = 0.2.0
 PKG_CONFIG ?= pkg-config
 
 CPPFLAGS ?=
@@ -8,6 +9,8 @@ LDFLAGS ?=
 WARNINGS = -Wall -Wextra -Wpedantic -Wformat=2 -Wshadow -Wconversion \
            -Wstrict-prototypes -Wmissing-prototypes
 STANDARD = -std=gnu17
+
+VERSION_CPPFLAGS = -DSCREENHACK_STANDALONE_VERSION=\"$(VERSION)\"
 
 X11_CFLAGS := $(shell $(PKG_CONFIG) --cflags x11)
 X11_LIBS := $(shell $(PKG_CONFIG) --libs x11)
@@ -31,7 +34,7 @@ mystify.o: mystify.c screenhack.h colors.h
 	      -c -o $@ mystify.c
 
 screenhack-standalone.o: screenhack-standalone.c screenhack.h
-	$(CC) $(CPPFLAGS) $(X11_CFLAGS) $(CFLAGS) $(STANDARD) $(WARNINGS) \
+	$(CC) $(CPPFLAGS) $(VERSION_CPPFLAGS) $(X11_CFLAGS) $(CFLAGS) $(STANDARD) $(WARNINGS) \
 	      -c -o $@ screenhack-standalone.c
 
 colors-standalone.o: colors-standalone.c colors.h

@@ -396,7 +396,7 @@ parse_options(int argc, char **argv,
                option_equal(argument, "-db")) {
       /* Accepted compatibility switches. */
     } else if (option_equal(argument, "-version")) {
-      printf("%s standalone\n", progname);
+      printf("%s %s\n", progname, SCREENHACK_STANDALONE_VERSION);
       exit(EXIT_SUCCESS);
     } else if (option_equal(argument, "-help") ||
                strcmp(argument, "-h") == 0) {

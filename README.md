@@ -7,6 +7,8 @@ It is intended for users who want Mystify on an existing XScreenSaver
 installation without replacing their distribution's complete XScreenSaver
 package or waiting for the next upstream release.
 
+Current standalone release: **0.2.0**
+
 ## Source synchronization
 
 `mystify.c`, `config/mystify.xml`, and `mystify.6x` are copied from the

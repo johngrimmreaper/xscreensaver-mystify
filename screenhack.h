@@ -4,6 +4,10 @@
 #include <X11/Xlib.h>
 #include <X11/Xresource.h>
 
+#ifndef SCREENHACK_STANDALONE_VERSION
+# define SCREENHACK_STANDALONE_VERSION "unknown"
+#endif
+
 extern char *progname;
 
 int get_integer_resource(Display *dpy, const char *name,

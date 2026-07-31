@@ -1,3 +1,13 @@
+xscreensaver-mystify (0.2.0-1) unstable; urgency=medium
+
+  * Synchronize Mystify with the implementation prepared for XScreenSaver.
+  * Keep the display hack source byte-for-byte identical to the main tree.
+  * Add standalone XScreenSaver lifecycle, resource, and color helpers.
+  * Build a single xscreensaver-mystify binary package.
+  * Correct the installed manual section without modifying the mirrored source.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Fri, 31 Jul 2026 20:21:00 +0000
+
 xscreensaver-mystify (0.1.1-1~noble1) noble; urgency=medium
 
   * Release Mystify 0.1.1 with Ubuntu-style XScreenSaver layout.

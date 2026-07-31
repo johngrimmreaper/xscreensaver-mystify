@@ -10,3 +10,8 @@ override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
 	$(MAKE) check
 endif
+
+override_dh_installman:
+	sed '1 s/^\.TH XScreenSaver 1 /.TH XScreenSaver 6x /' 		mystify.6x > debian/mystify.6x
+	dh_installman debian/mystify.6x
+	rm -f debian/mystify.6x
