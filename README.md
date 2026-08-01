@@ -156,6 +156,39 @@ The RPM package additionally installs Fedora and EPEL's modular
 `hacks.conf.d` registration fragment and refreshes XScreenSaver's generated
 hack list when the package is installed or removed.
 
+## Registering Mystify with XScreenSaver
+
+The Fedora and Enterprise Linux RPM registers Mystify automatically. Debian
+package and package-less installations currently require a per-user entry in
+`~/.xscreensaver` before Mystify appears in `xscreensaver-settings` and can be
+selected by the XScreenSaver daemon.
+
+Run `xscreensaver-settings` once if `~/.xscreensaver` does not yet exist. Then
+back up the configuration and add Mystify to the `programs` resource:
+
+```sh
+test -e ~/.xscreensaver.before-mystify ||
+  cp -a ~/.xscreensaver ~/.xscreensaver.before-mystify
+
+grep -Eq \
+  '^[[:space:]]*-?[[:space:]]*mystify[[:space:]]+--?root([[:space:]]|$)' \
+  ~/.xscreensaver ||
+  sed -i \
+    '/^programs:/a\                                mystify --root                              \\n\\' \
+    ~/.xscreensaver
+```
+
+XScreenSaver normally reloads `~/.xscreensaver` automatically. To reload it
+immediately and verify that Mystify appears in the settings dialog:
+
+```sh
+xscreensaver-command --restart
+xscreensaver-settings
+```
+
+When Mystify has been installed under a nonstandard `LIBEXECDIR`, replace
+`mystify` in the inserted entry with the full path to the executable.
+
 ## License
 
 Mystify and its standalone compatibility host are distributed under the X11
