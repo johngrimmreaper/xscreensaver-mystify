@@ -9,6 +9,13 @@ package or waiting for the next upstream release.
 
 Current standalone release: **0.2.0**
 
+<p align="center">
+  <img
+    src="docs/images/mystify.png"
+    alt="Mystify animating colorful deforming wire polygons on a black background"
+    width="960">
+</p>
+
 ## Source synchronization
 
 `mystify.c`, `config/mystify.xml`, and `mystify.6x` are copied from the
