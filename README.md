@@ -136,12 +136,16 @@ The generated packages are written beneath:
 ~/rpmbuild/SRPMS/
 ~/rpmbuild/RPMS/<architecture>/
 ```
-
 The RPM spec follows Fedora and EPEL's non-OpenGL XScreenSaver hack layout.
 It installs a modular `hacks.conf.d` fragment and refreshes XScreenSaver's
-generated hack list when the package is installed or removed. The additional
-`xscreensaver-mystify.desktop` entry follows Fedora's GNOME screensaver
-compatibility convention and is restricted with `OnlyShowIn=GNOME;`.
+generated hack list when the package is installed or removed.
+
+The RPM package also installs a GNOME-only desktop entry under
+`/usr/share/applications/screensavers`. The entry is marked with
+`OnlyShowIn=GNOME;`, allowing GNOME-compatible desktop tools to discover
+Mystify without exposing it as an ordinary application in KDE Plasma, Xfce,
+or other desktop environments. XScreenSaver itself registers Mystify
+separately through the installed `hacks.conf.d` fragment.
 
 ## Package contents
 
